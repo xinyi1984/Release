@@ -296,7 +296,7 @@ jobs:
             cd ${{ matrix.mediadir }}/tv
             # 1. 修改 gradle/libs.versions.toml 和 ../gradle/libs.versions.toml
             if [ -f "gradle/libs.versions.toml" ]; then
-              echo "🔧 修改 gradle/libs.versions.toml和../gradle/libs.versions.toml
+              echo "🔧 修改 gradle/libs.versions.toml和../gradle/libs.versions.toml"
               cp gradle/libs.versions.toml gradle/libs.versions.toml.bak
               current_minSdk=$(grep -oP 'minSdk\s*=\s*"\K[0-9]+' gradle/libs.versions.toml || echo "")
               if [ -n "$current_minSdk" ] && [ "$current_minSdk" != "21" ]; then
