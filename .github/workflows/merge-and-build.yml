@@ -29,7 +29,7 @@ jobs:
       matrix:
         include:
           - userName: xinyi1984
-            repoName: webhtv
+            repoName: tv
             branchName: fongmi
             minSdk: 21
             workdir: tv-release-21
@@ -385,7 +385,7 @@ jobs:
               echo ""
               echo "🔍 验证配置值:"
               final_minSdk=$(grep -oP 'minSdk\s*=\s*"\K[0-9]+' gradle/libs.versions.toml)
-              final_minSdkVersion=$(grep -oP 'minSdkVersion\s*=\s*\K[0-9]+' ../gradle/libs.versions.toml)
+              final_minSdkVersion=$(grep -oP 'minSdkVersion\s*=\s*"\K[0-9]+' ../gradle/libs.versions.toml)
               final_targetSdk=$(grep -oP 'targetSdk\s*=\s*"\K[0-9]+' gradle/libs.versions.toml)
               final_compileSdk=$(grep -oP 'compileSdk\s*=\s*"\K[0-9]+' gradle/libs.versions.toml)
               final_material=$(grep -oP 'material\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
