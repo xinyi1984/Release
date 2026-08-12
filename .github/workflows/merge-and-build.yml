@@ -17,8 +17,8 @@ env:
   TZ: Asia/Shanghai
   CNB_API_ENDPOINT: https://api.cnb.cool
   CNB_WEB_ENDPOINT: https://cnb.cool
-  CNB_REPO_SLUG: fish2035/webhtv-release
-  CNB_REPO_URL: https://cnb.cool/fish2035/webhtv-release.git
+  CNB_REPO_SLUG: ysysxy/webhtv-release
+  CNB_REPO_URL: https://cnb.cool/ysysxy/webhtv-release.git
   
 jobs:
   merge-and-build:
