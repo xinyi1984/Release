@@ -1,0 +1,42 @@
+name: 重命名 libs → jniLibs 并提交
+
+on:
+  workflow_dispatch:  # 手动触发
+
+jobs:
+  rename:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: 克隆 TV 仓库 (fongmi 分支)
+        run: |
+          git clone --branch fongmi "https://${{ secrets.PUSH_TOKEN }}@github.com/xinyi1984/TV.git" tv_repo
+
+      - name: 重命名 app/src/main/libs → jniLibs
+        run: |
+          cd tv_repo
+          if [ -d "app/src/main/libs" ]; then
+            echo "✅ 发现 app/src/main/libs，准备重命名..."
+            git mv app/src/main/libs app/src/main/jniLibs
+          else
+            echo "⚠️ 目录 app/src/main/libs 不存在，跳过重命名"
+            exit 0
+          fi
+
+      - name: 提交更改
+        run: |
+          cd tv_repo
+          # 检查是否有变更
+          if git status --porcelain | grep -q .; then
+            git commit -m "重命名 libs → jniLibs 以便打包 .so 文件"
+          else
+            echo "ℹ️ 无变更，跳过提交"
+            exit 0
+          fi
+
+      - name: 推送到远程 fongmi 分支
+        run: |
+          cd tv_repo
+          git push origin fongmi
+
+      - name: 清理临时目录
+        run: rm -rf tv_repo
