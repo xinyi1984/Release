@@ -380,7 +380,7 @@ jobs:
               echo "✅ 修改后的 gradle/libs.versions.toml 和 ../gradle/libs.versions.toml 关键配置:"
               echo "----------------------------------------"
               grep -E "(minSdk|targetSdk|compileSdk|material|agp|python|lifecycleService|media|room)" gradle/libs.versions.toml || echo "未找到相关配置"
-              grep -E "(minSdkVersion)" ../constants.gradle || echo "未找到相关配置"
+              grep -E "(minSdkVersion)" ../gradle/libs.versions.toml || echo "未找到相关配置"
               echo "----------------------------------------"
               echo ""
               echo "🔍 验证配置值:"
