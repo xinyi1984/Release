@@ -34,12 +34,6 @@ jobs:
             minSdk: 24
             workdir: tv-release-24
             mediadir: media-24
-          - userName: xinyi1984
-            repoName: tv
-            branchName: fongmi
-            minSdk: 21
-            workdir: tv-release-21
-            mediadir: media-21
 
     steps:
       # ========== 步骤1：检出代码 ==========
