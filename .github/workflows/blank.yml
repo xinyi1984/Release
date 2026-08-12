@@ -1,0 +1,1024 @@
+name: merge-and-build
+
+on:
+  schedule:
+    - cron: '20 3 * * *'
+  workflow_dispatch:
+    inputs:
+      rebuild:
+        description: '忽略构建记录以重新构建'
+        required: false
+        type: boolean
+      donotpublish:
+        description: '构建后不提交发布新版'
+        required: false
+        type: boolean
+env:
+  TZ: Asia/Shanghai
+  CNB_API_ENDPOINT: https://api.cnb.cool
+  CNB_WEB_ENDPOINT: https://cnb.cool
+  CNB_REPO_SLUG: fish2035/webhtv-release
+  CNB_REPO_URL: https://cnb.cool/fish2035/webhtv-release.git
+  
+jobs:
+  merge-and-build:
+    name: 同步和构建应用
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - userName: xinyi1984
+            repoName: webhtv
+            branchName: fongmi
+            minSdk: 24
+            workdir: tv-release-24
+            mediadir: media-24
+          - userName: xinyi1984
+            repoName: webhtv
+            branchName: fongmi
+            minSdk: 21
+            workdir: tv-release-21
+            mediadir: media-21
+
+    steps:
+      # ========== 步骤1：检出代码 ==========
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # ========== 步骤2：检查新提交 ==========
+      - name: 检查新提交
+        run: |
+          USER_NAME="xinyi1984"
+          REPO_NAME="TV"
+          BRANCH_NAME="fongmi"
+          upStream="https://github.com/FongMi/Release"
+          echo "upStream=$upStream" >> $GITHUB_ENV
+          upStreamtv="https://github.com/$USER_NAME/$REPO_NAME"
+          echo "upStreamtv=$upStreamtv" >> $GITHUB_ENV
+          echo "正在使用 git ls-remote 获取分支 $BRANCH_NAME 的最新 commit..."
+          commit=$(git ls-remote "$upStream" "refs/heads/$BRANCH_NAME" | cut -f1)
+          if [ -z "$commit" ]; then
+            echo "❌ 从 git ls-remote 获取 commit 失败。"
+            exit 1
+          fi
+          echo "获取到的 commit SHA: $commit"
+          if [[ -z "$commit" || "$commit" == "null" ]]; then
+            echo "❌ 无法解析出有效的 commit SHA。"
+            exit 1
+          fi
+          curl -s -o /tmp/remote_readme.md https://raw.githubusercontent.com/xinyi1984/Release/fongmi/README.md
+          readme_commit=$(grep -oE '[a-f0-9]{7,40}' /tmp/remote_readme.md | head -1)
+          echo "📝 README 中的 commit: $readme_commit"
+          if ! grep -q "$commit" /tmp/remote_readme.md; then
+            echo "commit=$commit" >> $GITHUB_ENV
+            echo "commitS=${commit:0:7}" >> $GITHUB_ENV
+            export TZ='Asia/Shanghai'
+            echo "⏱️ 正在获取提交时间（通过 git clone）..."
+            tmp_repo="/tmp/fongmi_repo_$$"
+            if git clone --depth 1 --branch "$BRANCH_NAME" "$upStream" "$tmp_repo" 2>/dev/null; then
+              cd "$tmp_repo"
+              commit_date=$(git show -s --format=%ci "$commit" 2>/dev/null || echo "")
+              cd /
+              rm -rf "$tmp_repo"
+              if [ -n "$commit_date" ]; then
+                commit_date_formatted=$(date -d "$commit_date" +'%Y%m%d-%H%M' 2>/dev/null || echo "")
+                if [ -n "$commit_date_formatted" ]; then
+                  echo "✅ 从 git 获取到提交时间: $commit_date_formatted"
+                  echo "tag=$commit_date_formatted" >> $GITHUB_ENV
+                  echo "最终设置的环境变量 tag: $commit_date_formatted"
+                else
+                  echo "⚠️ 无法转换 git 时间格式，使用当前时间"
+                  current_time=$(date +'%Y%m%d-%H%M')
+                  echo "tag=$current_time" >> $GITHUB_ENV
+                  echo "最终设置的环境变量 tag: $current_time"
+                fi
+              else
+                echo "⚠️ 无法从 git 获取提交时间，使用当前时间"
+                current_time=$(date +'%Y%m%d-%H%M')
+                echo "tag=$current_time" >> $GITHUB_ENV
+                echo "最终设置的环境变量 tag: $current_time"
+              fi
+            else
+              echo "⚠️ git clone 失败，使用当前时间"
+              current_time=$(date +'%Y%m%d-%H%M')
+              echo "tag=$current_time" >> $GITHUB_ENV
+              echo "最终设置的环境变量 tag: $current_time"
+            fi
+          else
+            echo "最终设置的环境变量 tag: 未设置（无需更新）"
+          fi
+          echo "最终设置的环境变量 commit: $commit"
+          echo "MIN_SDK=${{ matrix.minSdk }}" >> $GITHUB_ENV
+
+      # ========== 步骤3：克隆 TV 仓库 ==========
+      - name: 克隆 GitHub xinyi1984/TV fongmi 分支
+        if: ${{ env.commit }}
+        run: |
+          git clone -b fongmi https://xinyi1984:${{ secrets.PUSH_TOKEN }}@github.com/xinyi1984/TV.git ${{ matrix.workdir }}
+          cd ${{ matrix.workdir }}
+          echo "✅ 当前分支: $(git branch --show-current)"
+          echo "✅ 工作目录: $(pwd)"
+          echo "📱 构建minSdk版本: ${{ matrix.minSdk }}"
+      # ========== 步骤4：配置 Git ==========
+
+      - name: 配置 Git
+        if: ${{ env.commit }}
+        working-directory: ./${{ matrix.workdir }}
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git config --global pull.rebase false
+          echo "✅ Git 配置完成"
+
+      # ========== 步骤5：设置远程仓库 ==========
+      - name: 设置远程仓库
+        if: ${{ env.commit }}
+        working-directory: ./${{ matrix.workdir }}
+        run: |
+          git checkout fongmi
+          git remote set-url origin https://xinyi1984:${{ secrets.PUSH_TOKEN }}@github.com/xinyi1984/TV.git
+          git remote add upstream https://github.com/FongMi/TV.git || true
+          git remote set-url upstream https://github.com/FongMi/TV.git
+          git fetch --all --tags
+          git fetch upstream --tags
+          echo "✅ 远程仓库设置完成"
+          
+      - name: 执行合并
+        if: ${{ env.commit }}
+        id: merge
+        working-directory: ./${{ matrix.workdir }}
+        run: |
+          set -e
+          echo "🔄 开始合并上游更新..."
+          echo "🔍 当前分支: $(git branch --show-current)"
+          echo "🔍 工作目录: $(pwd)"
+          git pull origin fongmi --no-rebase --allow-unrelated-histories
+          if git merge upstream/fongmi --no-commit --no-ff --allow-unrelated-histories; then
+            echo "✅ 合并成功，检查是否有实际更改"
+            if ! git diff --cached --quiet || ! git diff --quiet; then
+              echo "📝 检测到实质性更新，准备提交"
+              git commit -m "🔗 合并上游 fongmi 更新 - $(date +'%Y年%m月%d日 %H:%M')"
+              git push origin fongmi
+              if [ $? -eq 0 ]; then
+                echo "✅ 有更新无冲突：合并成功并已推送更新"
+                echo "merge_result=success" >> $GITHUB_OUTPUT
+                LATEST_COMMIT=$(git log -1 --pretty=format:"%h - %s")
+                echo "LATEST_COMMIT=$LATEST_COMMIT" >> $GITHUB_OUTPUT
+              else
+                echo "❌ 推送失败，请检查权限设置"
+                echo "merge_result=push_failed" >> $GITHUB_OUTPUT
+              fi
+            else
+              echo "ℹ️  合并成功但无实质性更改"
+              git reset --hard HEAD
+              echo "merge_result=no_changes" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "⚠️  检测到合并冲突"
+            conflict_files=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+            if [ -z "$conflict_files" ]; then
+              conflict_files=$(git status --porcelain | grep -E '^(AA|UU|DU|UD)' | cut -c4- | tr '\n' ' ' | sed 's/ $//')
+            fi
+            echo "📋 冲突文件: $conflict_files"
+            echo "conflict_files=$conflict_files" >> $GITHUB_OUTPUT
+            echo "merge_result=conflict" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: 列出所有冲突行
+        if: steps.merge.outputs.merge_result == 'conflict'
+        id: list-conflicts
+        working-directory: ./${{ matrix.workdir }}
+        run: |
+          echo "✅ 检测到冲突，开始收集..."
+          echo "🔍 正在收集所有冲突行（含行号）..."
+          > conflict_details.txt
+          conflict_files=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+          if [ -z "$conflict_files" ]; then
+            conflict_files=$(git status --porcelain | grep -E '^(AA|UU|DU|UD)' | cut -c4- | tr '\n' ' ' | sed 's/ $//')
+          fi
+          echo "📋 冲突文件列表: $conflict_files"
+          echo "conflict_files=$conflict_files" >> $GITHUB_OUTPUT
+          if [ -z "$conflict_files" ]; then
+            echo "⚠️ 没有检测到冲突文件，跳过提取" >> conflict_details.txt
+          else
+            conflict_block=1
+            for file in $conflict_files; do
+              echo "📄 处理文件: $file"
+              echo "📄 文件: $file" >> conflict_details.txt
+              echo "----------------------------------------" >> conflict_details.txt
+              if [ ! -f "$file" ]; then
+                echo "⚠️  文件 $file 不存在，跳过" >> conflict_details.txt
+                continue
+              fi
+              if [[ "$file" == *.aar ]] || [[ "$file" == *.jar ]] || [[ "$file" == *.so ]] || [[ "$file" == *.apk ]] || [[ "$file" == *.png ]] || [[ "$file" == *.jpg ]] || [[ "$file" == *.gif ]]; then
+                echo "⚠️  跳过二进制文件: $file" >> conflict_details.txt
+                echo "" >> conflict_details.txt
+                continue
+              fi
+              awk -v block="$conflict_block" '
+                BEGIN { in_conflict = 0; current = block }
+                /^<<<<<<< HEAD$/ {
+                  in_conflict = 1;
+                  start_line = NR;
+                  print "【冲突块" current "】开始于第 " start_line " 行";
+                  print "====== 本地版本 ======";
+                  next;
+                }
+                /^=======$/ {
+                  if (in_conflict) {
+                    print "====== 上游版本 ======";
+                    next;
+                  }
+                }
+                /^>>>>>>> upstream\/fongmi$/ {
+                  if (in_conflict) {
+                    in_conflict = 0;
+                    print "----------------------------------------";
+                    print "";
+                    current++;
+                    next;
+                  }
+                }
+                in_conflict { print $0 }
+              ' "$file" >> conflict_details.txt
+              echo "✅ 文件 $file 处理完成" >> conflict_details.txt
+            done
+          fi
+          if [ -s conflict_details.txt ]; then
+            echo "=== 冲突详情 ==="
+            cat conflict_details.txt
+            echo "conflict_details=$(cat conflict_details.txt | base64 -w 0)" > /tmp/conflict_details.txt
+          else
+            echo "conflict_details=无具体冲突内容" > /tmp/conflict_details.txt
+            echo "⚠️ 未提取到任何冲突行"
+          fi
+          
+      - name: 发送冲突通知到企业微信
+        if: steps.merge.outputs.merge_result == 'conflict'
+        id: send-conflict-notification
+        working-directory: ./${{ matrix.workdir }}
+        run: |
+          echo "📱 发送冲突通知到企业微信..."
+          conflict_files=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+          if [ -z "$conflict_files" ]; then
+            conflict_files=$(git status --porcelain | grep -E '^(AA|UU|DU|UD)' | cut -c4- | tr '\n' ' ' | sed 's/ $//')
+          fi
+          if [ -z "$conflict_files" ]; then
+            conflict_files="${{ steps.list-conflicts.outputs.conflict_files }}"
+          fi
+          MESSAGE="🚨 webhtv项目合并冲突\n\n"
+          MESSAGE="${MESSAGE}> 分支: fongmi\n"
+          MESSAGE="${MESSAGE}> 冲突文件: ${conflict_files}\n\n"
+          MESSAGE="${MESSAGE}请手动解决冲突后重新运行"
+          curl -s -X POST "${{ secrets.WECHAT_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"msgtype\": \"text\",
+              \"text\": {
+                \"content\": \"$MESSAGE\"
+              }
+            }"
+          echo "✅ 已发送企业微信通知"
+          echo "❌ 检测到合并冲突"
+          echo "冲突文件: ${conflict_files}"
+          exit 1
+          
+      # ==================== 构建 minSdk=24 和 21 ====================
+      # ========== 步骤7：检出源代码 ==========
+      - name: 检出源代码
+        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        run: |
+          echo "📱 构建minSdk版本: ${{ matrix.minSdk }}"
+          git clone --branch release-1.11.0-fongmi https://github.com/xinyi1984/media.git ${{ matrix.mediadir }}
+          cd ${{ matrix.mediadir }}
+          echo "MEDIA_VERSION=1.11.0-fongmi" >> $GITHUB_ENV
+          echo "USING_LEGACY_VERSION=false" >> $GITHUB_ENV
+          cd $GITHUB_WORKSPACE
+          git clone --branch fongmi https://github.com/xinyi1984/tv.git ${{ matrix.mediadir }}/tv
+          if [ "${{ matrix.minSdk }}" = "21" ]; then
+            cd ${{ matrix.mediadir }}/tv
+            # 1. 修改 gradle/libs.versions.toml 和 constants.gradle
+            if [ -f "gradle/libs.versions.toml" ]; then
+              echo "🔧 修改 gradle/libs.versions.toml和constants.gradle"
+              cp gradle/libs.versions.toml gradle/libs.versions.toml.bak
+              current_minSdk=$(grep -oP 'minSdk\s*=\s*"\K[0-9]+' gradle/libs.versions.toml || echo "")
+              if [ -n "$current_minSdk" ] && [ "$current_minSdk" != "21" ]; then
+                sed -i 's/minSdk\s*=\s*"[0-9]\+"/minSdk = "21"/g' gradle/libs.versions.toml
+                echo "  ✓ minSdk: $current_minSdk → 21"
+              else
+                echo "  ✓ minSdk 已经是 21，无需修改"
+              fi
+              cp ../constants.gradle ../constants.gradle.bak
+              current_minSdkVersion=$(grep -oP 'minSdkVersion\s*=\s*\K[0-9]+' ../constants.gradle || echo "")
+              if [ -n "$current_minSdkVersion" ] && [ "$current_minSdkVersion" != 21 ]; then
+                sed -i 's/minSdkVersion = [0-9]\+/minSdkVersion = 21/g' ../constants.gradle
+                echo "  ✓ minSdkVersion: $current_minSdkVersion → 21"
+              else
+                echo "  ✓ minSdkVersion 已经是 21，无需修改"
+              fi
+              current_targetSdk=$(grep -oP 'targetSdk\s*=\s*"\K[0-9]+' gradle/libs.versions.toml || echo "")
+              if [ -n "$current_targetSdk" ] && [ "$current_targetSdk" != "28" ]; then
+                sed -i 's/targetSdk\s*=\s*"[0-9]\+"/targetSdk = "28"/g' gradle/libs.versions.toml
+                echo "  ✓ targetSdk: $current_targetSdk → 28"
+              else
+                echo "  ✓ targetSdk 已经是 28，无需修改"
+              fi
+              current_compileSdk=$(grep -oP 'compileSdk\s*=\s*"\K[0-9]+' gradle/libs.versions.toml || echo "")
+              if [ -n "$current_compileSdk" ] && [ "$current_compileSdk" != "36" ]; then
+                sed -i 's/compileSdk\s*=\s*"[0-9]\+"/compileSdk = "36"/g' gradle/libs.versions.toml
+                echo "  ✓ compileSdk: $current_compileSdk → 36"
+              else
+                echo "  ✓ compileSdk 已经是 36，无需修改"
+              fi
+              current_material=$(grep -oP 'material\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1 || echo "")
+              if [ -n "$current_material" ] && [ "$current_material" != "1.13.0" ]; then
+                sed -i 's/material\s*=\s*"[^"]*"/material = "1.13.0"/g' gradle/libs.versions.toml
+                echo "  ✓ material: $current_material → 1.13.0"
+              else
+                echo "  ✓ material 已经是 1.13.0，无需修改"
+              fi
+              current_agp=$(grep -oP 'agp\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1 || echo "")
+              if [ -n "$current_agp" ] && [ "$current_agp" != "8.8.2" ]; then
+                sed -i 's/agp\s*=\s*"[^"]*"/agp = "8.8.2"/g' gradle/libs.versions.toml
+                echo "  ✓ agp: $current_agp → 8.8.2"
+              else
+                echo "  ✓ agp 已经是 8.8.2，无需修改"
+              fi
+              current_python=$(grep -oP 'python\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1 || echo "")
+              if [ -n "$current_python" ] && [ "$current_python" != "15.0.1" ]; then
+                sed -i 's/python\s*=\s*"[^"]*"/python = "15.0.1"/g' gradle/libs.versions.toml
+                echo "  ✓ python (Chaquopy): $current_python → 15.0.1"
+              else
+                echo "  ✓ python 已经是 15.0.1，无需修改"
+              fi
+              current_lifecycleService=$(grep -oP 'lifecycleService\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1 || echo "")
+              if [ -n "$current_lifecycleService" ] && [ "$current_lifecycleService" != "2.5.1" ]; then
+                sed -i 's/lifecycleService\s*=\s*"[^"]*"/lifecycleService = "2.5.1"/g' gradle/libs.versions.toml
+                echo "  ✓ lifecycleService: $current_lifecycleService → 2.5.1"
+              else
+                echo "  ✓ lifecycleService 已经是 2.5.1，无需修改"
+              fi
+              current_media=$(grep -oP 'media\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1 || echo "")
+              if [ -n "$current_media" ] && [ "$current_media" != "1.7.1" ]; then
+                sed -i 's/media\s*=\s*"[^"]*"/media = "1.7.1"/g' gradle/libs.versions.toml
+                echo "  ✓ media: $current_media → 1.7.1"
+              else
+                echo "  ✓ media 已经是 1.7.1，无需修改"
+              fi
+              current_room=$(grep -oP 'room\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1 || echo "")
+              if [ -n "$current_room" ] && [ "$current_room" != "2.7.0" ]; then
+                sed -i 's/room\s*=\s*"[^"]*"/room = "2.7.0"/g' gradle/libs.versions.toml
+                echo "  ✓ room: $current_room → 2.7.0"
+              else
+                echo "  ✓ room 已经是 2.7.0，无需修改"
+              fi
+              current_glide=$(grep -oP 'glide\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1 || echo "")
+              if [ -n "$current_glide" ] && [ "$current_glide" != "5.0.7" ]; then
+                sed -i 's/glide\s*=\s*"[^"]*"/glide = "5.0.7"/g' gradle/libs.versions.toml
+                echo "  ✓ glide: $current_glide → 5.0.7"
+              else
+                echo "  ✓ glide 已经是 5.0.7，无需修改"
+              fi
+              echo ""
+              echo "✅ 修改后的 gradle/libs.versions.toml 和 constants.gradle 关键配置:"
+              echo "----------------------------------------"
+              grep -E "(minSdk|targetSdk|compileSdk|material|agp|python|lifecycleService|media|room)" gradle/libs.versions.toml || echo "未找到相关配置"
+              grep -E "(minSdkVersion)" ../constants.gradle || echo "未找到相关配置"
+              echo "----------------------------------------"
+              echo ""
+              echo "🔍 验证配置值:"
+              final_minSdk=$(grep -oP 'minSdk\s*=\s*"\K[0-9]+' gradle/libs.versions.toml)
+              final_minSdkVersion=$(grep -oP 'minSdkVersion\s*=\s*\K[0-9]+' ../constants.gradle)
+              final_targetSdk=$(grep -oP 'targetSdk\s*=\s*"\K[0-9]+' gradle/libs.versions.toml)
+              final_compileSdk=$(grep -oP 'compileSdk\s*=\s*"\K[0-9]+' gradle/libs.versions.toml)
+              final_material=$(grep -oP 'material\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
+              final_agp=$(grep -oP 'agp\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
+              final_python=$(grep -oP 'python\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
+              final_lifecycleService=$(grep -oP 'lifecycleService\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
+              final_media=$(grep -oP 'media\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
+              final_room=$(grep -oP 'room\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
+              final_glide=$(grep -oP 'glide\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
+              [ "$final_minSdk" = "21" ] && echo "  ✓ minSdk = $final_minSdk" || echo "  ✗ minSdk = $final_minSdk (期望 21)"
+              [ "$final_minSdkVersion" = "21" ] && echo "  ✓ minSdkVersion = $final_minSdkVersion" || echo "  ✗ minSdkVersion = $final_minSdkVersion (期望 21)"
+              [ "$final_targetSdk" = "28" ] && echo "  ✓ targetSdk = $final_targetSdk" || echo "  ✗ targetSdk = $final_targetSdk (期望 28)"
+              [ "$final_compileSdk" = "36" ] && echo "  ✓ compileSdk = $final_compileSdk" || echo "  ✗ compileSdk = $final_compileSdk (期望 36)"
+              [ "$final_material" = "1.13.0" ] && echo "  ✓ material = $final_material" || echo "  ✗ material = $final_material (期望 1.13.0)"
+              [ "$final_agp" = "8.8.2" ] && echo "  ✓ agp = $final_agp" || echo "  ✗ agp = $final_agp (期望 8.8.2)"
+              [ "$final_python" = "15.0.1" ] && echo "  ✓ python = $final_python" || echo "  ✗ python = $final_python (期望 15.0.1)"
+              [ "$final_lifecycleService" = "2.5.1" ] && echo "  ✓ lifecycleService = $final_lifecycleService" || echo "  ✗ lifecycleService = $final_lifecycleService (期望 2.5.1)"
+              [ "$final_media" = "1.7.1" ] && echo "  ✓ media = $final_media" || echo "  ✗ media = $final_media (期望 1.7.1)"
+              [ "$final_room" = "2.7.0" ] && echo "  ✓ room = $final_room" || echo "  ✗ room = $final_room (期望 2.7.0)"
+              [ "$final_glide" = "2.7.0" ] && echo "  ✓ glide = $final_glide" || echo "  ✗ room = $final_glide (期望 5.0.7)"
+              echo ""
+              echo "✅ gradle/libs.versions.toml 和 constants.gradle 修改完成"
+            fi
+            # 2. 修改 gradle-wrapper.properties
+            if [ -f "gradle/wrapper/gradle-wrapper.properties" ]; then
+              echo "🔧 修改 gradle-wrapper.properties..."
+              cp gradle/wrapper/gradle-wrapper.properties gradle/wrapper/gradle-wrapper.properties.bak
+              sed -i 's|https\\://services.gradle.org/distributions|https\\://mirrors.cloud.tencent.com/gradle|g' gradle/wrapper/gradle-wrapper.properties
+              current_gradle=$(grep -oP 'gradle-\K[0-9.]+(?=-bin\.zip)' gradle/wrapper/gradle-wrapper.properties || echo "")
+              if [ -n "$current_gradle" ] && [ "$current_gradle" != "8.10.2" ]; then
+                sed -i 's/^distributionSha256Sum/#distributionSha256Sum/g' gradle/wrapper/gradle-wrapper.properties
+                sed -i 's|gradle-[0-9.]*-bin.zip|gradle-8.10.2-bin.zip|g' gradle/wrapper/gradle-wrapper.properties
+                echo "  ✓ Gradle: $current_gradle → 8.10.2"
+              else
+                echo "  ✓ Gradle 已经是 8.10.2，无需修改"
+              fi
+              echo ""
+              echo "✅ 修改后的 gradle-wrapper.properties:"
+              echo "----------------------------------------"
+              grep "distributionUrl" gradle/wrapper/gradle-wrapper.properties
+              echo "----------------------------------------"
+            fi
+            # 3. 写入 gradle.properties
+            echo "🔧 写入 gradle.properties..."
+            printf '%s\n' \
+              'org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' \
+              'org.gradle.caching=true' \
+              'org.gradle.parallel=true' \
+              '' \
+              'android.useAndroidX=true' \
+              'android.enableJetifier=true' \
+              'android.useFullClasspathForDexingTransform=true' \
+              'android.nonTransitiveRClass=false' \
+              'android.nonFinalResIds=false' \
+              'chaquopy.ignoreDebug=true' \
+              'android.suppressUnsupportedCompileSdk=36' > gradle.properties
+            echo "  ✅ gradle.properties 已写入"
+            echo ""
+            echo "✅ gradle.properties 内容:"
+            echo "----------------------------------------"
+            cat gradle.properties
+            echo "----------------------------------------"
+            # 4. 添加 packaging 配置解决重复文件冲突
+            if [ -f "app/build.gradle" ]; then
+              echo "🔧 添加 packaging 配置解决重复文件冲突..."
+              cp app/build.gradle app/build.gradle.bak
+              if ! grep -q "pickFirsts" app/build.gradle; then
+                printf '%s\n' \
+                  '' \
+                  'android.packaging {' \
+                  '    resources.pickFirsts += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"' \
+                  '}' >> app/build.gradle
+                echo "  ✅ packaging 配置已添加"
+                echo ""
+                echo "✅ 已添加的 packaging 配置:"
+                echo "----------------------------------------"
+                tail -5 app/build.gradle
+                echo "----------------------------------------"
+              else
+                echo "  ✓ packaging 配置已存在"
+              fi
+            fi
+
+            # 4. 修改 chaquo/requirements.txt：固定 pyquery==1.4.3 在 ujson 后 
+            if [ -f "chaquo/requirements.txt" ]; then
+                echo "🔧 修改 chaquo/requirements.txt，固定 pyquery==1.4.3 在 ujson 后..."
+                # 删除已有的 pyquery 行（如果有）
+                sed -i '/^pyquery/d' chaquo/requirements.txt
+                # 在 ujson 行后插入 pyquery==1.4.3
+                sed -i '/^ujson$/a pyquery==1.4.3' chaquo/requirements.txt
+                echo "✅ 已修改 chaquo/requirements.txt"
+            fi
+            
+            echo "✅ minSdk 21 配置修改完成"
+          else
+            cd ${{ matrix.mediadir }}/tv
+          fi
+          committv=$(git rev-parse HEAD)
+          commitStv=${committv:0:7}
+          echo "committv=$committv" >> $GITHUB_ENV
+          echo "commitStv=$commitStv" >> $GITHUB_ENV
+          export TZ='Asia/Shanghai'
+          echo "tagtv=$(git log --date=format:'%Y%m%d-%H%M' --pretty=format:%cd $commitStv -1)" >> $GITHUB_ENV
+          echo "✅ 源代码检出完成"
+          echo "📊 配置汇总:"
+          echo "  - minSdk版本: ${{ matrix.minSdk }}"
+          echo "  - Media版本: $MEDIA_VERSION"
+          echo "  - TV提交ID: $committv"
+
+      # ========== 步骤8：检查项目结构 ==========
+      - name: 检查项目结构
+        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        working-directory: ${{ matrix.mediadir }}/tv
+        run: |
+          echo "=== 检查项目结构 ==="
+          echo "当前目录: $(pwd)"
+          echo "目录内容:"
+          ls -la
+          echo "=== 检查gradle文件 ==="
+          find . -name "*.gradle" -type f | head -20
+          echo "=== settings.gradle 内容 ==="
+          if [ -f "settings.gradle" ]; then
+            cat settings.gradle
+            cp settings.gradle settings.gradle.backup
+            if grep -q "core_settings.gradle" settings.gradle; then
+              echo "修复core_settings.gradle引用..."
+              sed -i 's|apply from: ".*core_settings.gradle"|// &|' settings.gradle
+              echo "修复后的相关行:"
+              grep "core_settings" settings.gradle || echo "已移除core_settings引用"
+            fi
+          else
+            echo "❌ settings.gradle 不存在"
+          fi
+
+      # ========== 步骤9：额外修改和获取版本信息 ==========
+      - name: 额外修改和获取版本信息
+        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        id: extra-modifications
+        working-directory: ${{ matrix.mediadir }}/tv
+        run: |
+          echo "📋 获取版本信息..."
+          VERSION_NAME=$(grep "versionName" app/build.gradle | head -1 | sed -E 's/.*versionName\s+"([^"]+)".*/\1/')
+          VERSION_CODE=$(grep "versionCode" app/build.gradle | head -1 | sed -E 's/.*versionCode\s+([0-9]+).*/\1/')
+          echo "版本名称: $VERSION_NAME"
+          echo "版本代码: $VERSION_CODE"
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
+          echo '修改VersionName'
+          if [ "${{ matrix.userName }}" == "xinyi1984" ]; then
+            sed -i 's/\.concat(buildTime())/ +\"${{ env.tagtv }}\"/g' app/build.gradle
+          else
+            sed -i "/versionName/s#[0-9a-zA-Z_\.\'\"-]\+\$#\'${{ env.tagtv }}\'#" app/build.gradle
+            if [ -f "app/src/main/res/layout/dialog_about.xml" ]; then
+              sed -i "/android:text=/s#=\"#=\"${{ env.tagtv }}\\\\n\\\\n#" app/src/main/res/layout/dialog_about.xml
+              echo "✅ 已修改dialog_about.xml"
+            else
+              echo "⚠️ dialog_about.xml文件不存在，跳过修改"
+            fi
+          fi
+          echo 'crosswalk源，防挂'
+          if grep -q 'crosswalk' build.gradle; then
+            sed -i "/crosswalk/a\        maven { url 'https://o0HalfLife0o.github.io/crosswalk/releases/crosswalk/android/maven2' }" build.gradle
+          else
+            sed -i "/jitpack.io/a\        maven { url 'https://o0HalfLife0o.github.io/crosswalk/releases/crosswalk/android/maven2' }" build.gradle
+          fi
+
+      # ========== 步骤10：压缩源代码 ==========
+      - name: 压缩源代码
+        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        working-directory: ${{ matrix.mediadir }}/tv
+        run: |
+          rm -rf release
+          zip -q -x ".git/*" -x  ".github/*" -r source-${{ env.commitStv }}.zip .
+
+      # ========== 步骤11：手动安装 JetBrains Runtime ==========
+      - name: 手动安装 JetBrains Runtime
+        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        run: |
+          JBR_URL="https://d2xrhe97vsfxuc.cloudfront.net/jbrsdk-21.0.10-linux-x64-b1163.110.tar.gz"
+          INSTALL_DIR="/opt/jbr"
+          wget --progress=dot:giga -O /tmp/jbrsdk.tar.gz "$JBR_URL"
+          mkdir -p "$INSTALL_DIR"
+          tar -xzf /tmp/jbrsdk.tar.gz -C "$INSTALL_DIR" --strip-components=1
+          echo "JAVA_HOME=$INSTALL_DIR" >> $GITHUB_ENV
+          echo "PATH=\$PATH:$INSTALL_DIR/bin" >> $GITHUB_PATH
+          echo "✅ JetBrains Runtime 安装完成"
+
+      # ========== 步骤12：验证 Java 环境（优化后） ==========
+      - name: 验证 Java 环境
+        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        run: |
+          export JAVA_HOME="$JAVA_HOME"
+          export PATH="$PATH:$JAVA_HOME/bin"
+          echo "JAVA_HOME=$JAVA_HOME"
+          $JAVA_HOME/bin/java -version
+
+      # ========== 步骤13：设置Android SDK ==========
+      - name: 设置Android SDK
+        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        uses: android-actions/setup-android@v4
+
+      # ========== 步骤14：设置Gradle ==========
+      - name: 设置Gradle
+        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        uses: gradle/actions/setup-gradle@v6
+
+      # ========== 步骤15：构建 Media 模块 AAR ==========
+      - name: 构建 Media 模块 AAR
+        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        working-directory: ${{ matrix.mediadir }}
+        run: |
+          set +e
+          chmod +x gradlew
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          ./gradlew projects > projects.txt
+          NEEDED_MODULES=(
+            "common" "container" "database" "datasource" "datasource_okhttp" "datasource_rtmp"
+            "decoder" "decoder_av1" "decoder_mpegh" "effect" "exoplayer" "exoplayer_dash" "exoplayer_hls"
+            "exoplayer_rtsp" "exoplayer_smoothstreaming" "extractor" "mpvplayer" "session" "ui" "ui_danmaku"
+          )
+          PROJECTS=()
+          for mod in "${NEEDED_MODULES[@]}"; do
+            proj=$(grep -E "Project ':(lib|media3-lib)-${mod}(-|$|')" projects.txt | sed "s/.*Project '\([^']*\)'.*/\1/" | head -1)
+            if [ -z "$proj" ]; then
+              alt_mod=${mod//_/-}
+              proj=$(grep -E "Project ':(lib|media3-lib)-${alt_mod}(-|$|')" projects.txt | sed "s/.*Project '\([^']*\)'.*/\1/" | head -1)
+            fi
+            if [ -n "$proj" ]; then
+              PROJECTS+=("$proj")
+              echo "✅ 找到模块 $mod 的项目: $proj"
+            fi
+          done
+          if [ ${#PROJECTS[@]} -eq 0 ]; then
+            echo "❌ 没有找到任何需要的项目，构建失败"
+            exit 1
+          fi
+          for proj in "${PROJECTS[@]}"; do
+            echo "构建 $proj:assembleRelease"
+            ./gradlew "$proj:assembleRelease" --stacktrace --continue
+          done
+          mkdir -p tv/app/libs
+          for proj in "${PROJECTS[@]}"; do
+            module=$(echo "$proj" | sed -E 's/^:(lib|media3-lib)-//')
+            aar_name="${proj#:}-release.aar"
+            aar_path="libraries/$module/buildout/outputs/aar/$aar_name"
+            if [ ! -f "$aar_path" ]; then
+              aar_path="libraries/$module/build/outputs/aar/$aar_name"
+            fi
+            if [ -f "$aar_path" ]; then
+              cp -v "$aar_path" "tv/app/libs/"
+            else
+              global_aar=$(find . -name "$aar_name" | head -1)
+              if [ -f "$global_aar" ]; then
+                cp -v "$global_aar" "tv/app/libs/"
+              fi
+            fi
+          done
+          echo "libs 目录内容："
+          ls -la tv/app/libs/
+          set -e
+
+      # ========== 步骤16：修改所有 AAR 中的 minSdk（24→21） ==========
+      - name: 修改 AAR 文件中的 minSdk 24→21
+        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') && matrix.minSdk == '21' }}
+        working-directory: ${{ matrix.mediadir }}/tv
+        run: |
+          echo "🔧 修改 AAR 文件中的 minSdk (24→21)..."
+          for aar_file in app/libs/*.aar; do
+            if [ -f "$aar_file" ]; then
+              echo "  处理: $(basename "$aar_file")"
+              temp_dir=$(mktemp -d)
+              unzip -q "$aar_file" -d "$temp_dir"
+              if [ -f "$temp_dir/AndroidManifest.xml" ]; then
+                current_minSdk=$(grep -oP 'minSdkVersion="\K[0-9]+' "$temp_dir/AndroidManifest.xml" || echo "")
+                if [ -n "$current_minSdk" ] && [ "$current_minSdk" != "21" ]; then
+                  sed -i 's/minSdkVersion="[0-9]\+"/minSdkVersion="21"/g' "$temp_dir/AndroidManifest.xml"
+                  sed -i 's/minSdkVersion=[0-9]\+/minSdkVersion=21/g' "$temp_dir/AndroidManifest.xml"
+                  echo "    ✓ minSdk: $current_minSdk → 21"
+                  cd "$temp_dir"
+                  zip -q -r "$OLDPWD/$aar_file" .
+                  cd "$OLDPWD"
+                  echo "    ✅ 已重新打包"
+                else
+                  echo "    ✓ minSdk 已经是 21，无需修改"
+                fi
+              else
+                echo "    ⚠️ 未找到 AndroidManifest.xml"
+              fi
+              rm -rf "$temp_dir"
+            fi
+          done
+          echo "✅ AAR 文件修改完成"
+          echo "app/libs 目录内容:"
+          ls -la app/libs/
+
+      # ========== 步骤17：安装 Python (根据 minSdk 版本) ==========
+      - name: 安装 Python (根据 minSdk 版本)
+        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        run: |
+          if ! command -v uv &> /dev/null; then
+            echo "📦 安装 uv..."
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            export PATH="$HOME/.cargo/bin:$PATH"
+            echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          fi
+          if [[ "${{ matrix.minSdk }}" == "21" ]]; then
+            echo "minSdk=21，安装 Python 3.8"
+            uv python install 3.8
+            python3.8 --version
+            which python3.8
+            PYTHON_VERSION="3.8"
+            if [ -f "${{ matrix.mediadir }}/tv/chaquo/build.gradle" ]; then
+              echo "修改 Chaquopy Python 版本: 3.10 → ${PYTHON_VERSION}"
+              sed -i 's/version = "3\.10"/version = "3.8"/' "${{ matrix.mediadir }}/tv/chaquo/build.gradle"
+              echo "✅ 修改后的配置:"
+              grep 'version = "3.8"' "${{ matrix.mediadir }}/tv/chaquo/build.gradle" || echo "⚠️ 未找到 version = \"3.8\""
+            else
+              echo "⚠️ chaquo/build.gradle 不存在，跳过修改"
+            fi
+          else
+            echo "minSdk=${{ matrix.minSdk }}，安装 Python 3.10"
+            uv python install 3.10
+            python3.10 --version
+            which python3.10
+            PYTHON_VERSION="3.10"
+          fi
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "✅ Python ${PYTHON_VERSION} 安装完成"
+        
+      # ========== 步骤18：构建 APK==========
+      - name: 构建 APK
+        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        id: gradle-build
+        working-directory: ${{ matrix.mediadir }}/tv
+        timeout-minutes: 30
+        run: |
+          WORKSPACE=$(pwd)
+          echo "${{ secrets.TV_JKS_BASE64 }}" | base64 -d > "$WORKSPACE/app/TV.jks"
+          cat > local.properties << EOF
+          sdk.dir=$ANDROID_HOME
+          storeFile=$WORKSPACE/app/TV.jks
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storePassword=${{ secrets.KEY_STORE_PASSWORD }}
+          EOF
+          echo "=== 签名文件 ==="
+          ls -la "$WORKSPACE/app/TV.jks"
+          echo "=== local.properties (隐藏密码) ==="
+          grep -v "storePassword" local.properties || cat local.properties
+          chmod +x ./gradlew
+          ./gradlew clean
+          ./gradlew assemblerelease --build-cache --parallel --daemon --warning-mode all
+          
+      # ========== 步骤19：准备 APK ==========
+      - name: 准备 APK
+        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        id: prepare-apk
+        working-directory: ${{ matrix.mediadir }}/tv
+        run: |
+          echo "=== 查找和准备 APK 文件 ==="
+          rm -rf apk/
+          mkdir -p apk/
+          APK_LIST=$(mktemp)
+          find . -name "*.apk" -type f > "$APK_LIST"
+          APK_FILES_INFO=""
+          APK_COUNT=0
+          while IFS= read -r file; do
+            echo "找到 APK: $file"
+            filename=$(basename "$file")
+            cp "$file" apk/
+            file_size=$(du -h "$file" | cut -f1)
+            APK_FILES_INFO="${APK_FILES_INFO}${filename} (${file_size}), "
+            APK_COUNT=$((APK_COUNT + 1))
+          done < "$APK_LIST"
+          rm -f "$APK_LIST"
+          if [ -n "$APK_FILES_INFO" ]; then
+            APK_FILES_INFO=$(echo "$APK_FILES_INFO" | sed 's/, $//')
+          fi
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "❌ 未找到任何 APK 文件"
+            echo "检查构建输出目录..."
+            find . -name "build" -type d | head -5 | while read dir; do
+              echo "检查目录: $dir"
+              find "$dir" -name "*.apk" -type f | head -5
+            done
+            echo "build_result=failure" >> $GITHUB_OUTPUT
+            echo "apk_count=0" >> $GITHUB_OUTPUT
+            echo "apk_files_info=无APK文件生成" >> $GITHUB_OUTPUT
+          else
+            echo "✅ 找到 $APK_COUNT 个 APK 文件: $APK_FILES_INFO"
+            echo "build_result=success" >> $GITHUB_OUTPUT
+            echo "apk_count=$APK_COUNT" >> $GITHUB_OUTPUT
+            echo "apk_files_info=$APK_FILES_INFO" >> $GITHUB_OUTPUT
+          fi
+          mv source-${{ env.commitStv }}.* apk/ 2>/dev/null || echo "未找到源代码压缩包"
+          echo "apk 目录最终内容:"
+          ls -la apk/
+
+      # ========== 步骤20：推送 APK (minSdk=${{ matrix.minSdk }}) 到 fongmi 分支（移除 --depth 2） ==========
+      - name: 推送 APK (minSdk=${{ matrix.minSdk }}) 到 fongmi 分支
+        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        run: |
+          set -e
+          echo "克隆 Release 仓库 (fongmi 分支)..."
+          git clone --depth 2 --branch fongmi \
+            "https://${{ secrets.PUSH_TOKEN }}@github.com/xinyi1984/Release.git" \
+            release-apk-${{ matrix.minSdk }} || {
+              echo "❌ 克隆失败"
+              exit 1
+            }
+          cd release-apk-${{ matrix.minSdk }}
+          APK_DIR="apk/minSdk${{ matrix.minSdk }}"
+          rm -rf "$APK_DIR/"
+          mkdir -p "$APK_DIR/"
+          SOURCE_DIR="$GITHUB_WORKSPACE/${{ matrix.mediadir }}/tv/Release/apk"
+          if [ ! -d "$SOURCE_DIR" ]; then
+            SOURCE_DIR="$GITHUB_WORKSPACE/${{ matrix.mediadir }}/tv/apk"
+          fi
+          if [ -d "$SOURCE_DIR" ] && [ "$(ls -A "$SOURCE_DIR" 2>/dev/null)" ]; then
+            cp -v "$SOURCE_DIR"/*.apk "$APK_DIR/" 2>/dev/null || echo "⚠️ 复制 APK 失败"
+          else
+            echo "⚠️ 源目录 $SOURCE_DIR 不存在或为空，跳过复制"
+          fi
+          echo "下载JSON文件..."
+          curl -L -o "$APK_DIR/leanback.json" "https://raw.githubusercontent.com/FongMi/Release/fongmi/apk/leanback.json"
+          curl -L -o "$APK_DIR/mobile.json" "https://raw.githubusercontent.com/FongMi/Release/fongmi/apk/mobile.json"
+          BASE_URL="https://raw.githubusercontent.com/xinyi1984/Release/fongmi"
+          LEANBACK_APK=$(ls "$APK_DIR/" | grep -i leanback | head -1)
+          MOBILE_APK=$(ls "$APK_DIR/" | grep -i mobile | head -1)
+          if [ -n "$LEANBACK_APK" ]; then
+            sed -i "s|\"leanback\":.*|\"leanback\": \"$BASE_URL/$APK_DIR/$LEANBACK_APK\",|" "$APK_DIR/leanback.json"
+            sed -i "s|\"leanback\":.*|\"leanback\": \"$BASE_URL/$APK_DIR/$LEANBACK_APK\",|" "$APK_DIR/mobile.json"
+          fi
+          if [ -n "$MOBILE_APK" ]; then
+            sed -i "s|\"mobile\":.*|\"mobile\": \"$BASE_URL/$APK_DIR/$MOBILE_APK\",|" "$APK_DIR/leanback.json"
+            sed -i "s|\"mobile\":.*|\"mobile\": \"$BASE_URL/$APK_DIR/$MOBILE_APK\",|" "$APK_DIR/mobile.json"
+          fi
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$APK_DIR/"
+          if [ -n "$(git status --porcelain)" ]; then
+            VERSION_NAME="$VERSION_NAME"
+            version_code="$VERSION_CODE"
+            git commit -m "Update minSdk${{ matrix.minSdk }} to $VERSION_NAME (Build $version_code)"
+            git fetch origin fongmi --force
+            if git push origin fongmi --force-with-lease; then
+              echo "✅ 推送成功"
+            else
+              echo "⚠️ 推送失败，尝试强制推送..."
+              git push origin fongmi --force
+            fi
+          else
+            echo "ℹ️ 无变更，跳过提交"
+          fi
+          cd ..
+          rm -rf release-apk-${{ matrix.minSdk }}
+          echo "✅ APK (minSdk=${{ matrix.minSdk }}) 推送完成"
+
+      # ========== 步骤21：更新 README（fongmi 分支，移除 --depth 2） ==========
+      - name: 更新 README（fongmi 分支）
+        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        run: |
+          echo "克隆 Release 仓库 (fongmi 分支) 用于更新 README..."
+          git clone --depth 2 --branch fongmi "https://${{ secrets.PUSH_TOKEN }}@github.com/xinyi1984/Release.git" master-commit-${{ matrix.minSdk }} || {
+            echo "❌ 克隆失败"
+            exit 1
+          }
+          cd master-commit-${{ matrix.minSdk }}
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # 直接从环境变量读取
+          commit_f="$commit"
+          tag="$tag"
+          committv="$committv"
+          tagtv="$tagtv"
+          sed -i "/FongMi\/Release\/tree\/fongmi/s#Updated: [a-zA-Z0-9]*#Updated: $commit_f#" README.md
+          sed -i "/FongMi\/Release\/tree\/fongmi/s#name: [0-9\-]*#name: $tag#" README.md
+          sed -i "/xinyi1984\/TV\/tree\/fongmi/s#Updated: [a-zA-Z0-9]*#Updated: $committv#" README.md
+          sed -i "/xinyi1984\/TV\/tree\/fongmi/s#name: [0-9\-]*#name: $tagtv#" README.md
+          if [ -n "$(git status --porcelain)" ]; then
+            git add README.md
+            git commit -m "Update README for minSdk=${{ matrix.minSdk }} - $commit_f"
+            git pull --rebase origin fongmi
+            git push origin fongmi
+            echo "✅ README.md 已更新并推送到 fongmi 分支"
+          else
+            echo "ℹ️ README.md 无变更，跳过提交"
+          fi
+          cd ..
+          rm -rf master-commit-${{ matrix.minSdk }}
+
+      # ========== 步骤22：发送企业微信通知 ==========
+      - name: 发送企业微信通知
+        #if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        if: false   # 已禁用
+        run: |
+          echo "📱 发送企业微信通知..."
+          VERSION_NAME="$VERSION_NAME"
+          version_code="$VERSION_CODE"
+          tagtv="$tagtv"
+          echo "📥 从远程仓库获取最新 commit SHA..."
+          LATEST_COMMIT=$(git ls-remote https://github.com/xinyi1984/Release.git refs/heads/fongmi | cut -f1)
+          if [ -n "$LATEST_COMMIT" ] && [ ${#LATEST_COMMIT} -eq 40 ]; then
+            echo "✅ git ls-remote 获取成功: $LATEST_COMMIT"
+          else
+            echo "❌ git ls-remote 获取失败"
+            exit 1
+          fi
+          echo "📥 从 GitHub 获取版本信息..."
+          LEANBACK_JSON=$(curl -s --connect-timeout 10 "https://raw.githubusercontent.com/FongMi/Release/refs/heads/fongmi/apk/leanback.json")
+          MOBILE_JSON=$(curl -s --connect-timeout 10 "https://raw.githubusercontent.com/FongMi/Release/refs/heads/fongmi/apk/mobile.json")
+          TV_DESC=$(echo "$LEANBACK_JSON" | jq -r '.desc // empty' 2>/dev/null)
+          MOBILE_DESC=$(echo "$MOBILE_JSON" | jq -r '.desc // empty' 2>/dev/null)
+          if [ -z "$TV_DESC" ]; then
+            TV_DESC="无更新日志"
+          fi
+          if [ -z "$MOBILE_DESC" ]; then
+            MOBILE_DESC="无更新日志"
+          fi
+          TV_CHANGELOG=$(echo "$TV_DESC" | sed 's/\\n/\n/g')
+          MOBILE_CHANGELOG=$(echo "$MOBILE_DESC" | sed 's/\\n/\n/g')
+          if [ -z "$TV_CHANGELOG" ]; then
+            TV_CHANGELOG="无详细更新日志"
+          fi
+          if [ -z "$MOBILE_CHANGELOG" ]; then
+            MOBILE_CHANGELOG="无详细更新日志"
+          fi
+          BUILD_TAG="${VERSION_NAME}"
+          MESSAGE="✅ FongMi-TV (minSdk=${{ matrix.minSdk }})
+          构建版本: ${BUILD_TAG}
+          构建时间: ${tagtv}
+           📺 电视版更新内容：
+          ${TV_CHANGELOG}
+          📱 手机版更新内容：
+          ${MOBILE_CHANGELOG}
+           📥 下载链接 (minSdk ${{ matrix.minSdk }}):
+          电视版 32位:
+           https://raw.githubusercontent.com/xinyi1984/Release/${LATEST_COMMIT}/apk/minSdk${{ matrix.minSdk }}/leanback-armeabi_v7a.apk
+           电视版 64位:
+           https://raw.githubusercontent.com/xinyi1984/Release/${LATEST_COMMIT}/apk/minSdk${{ matrix.minSdk }}/leanback-arm64_v8a.apk
+           手机版 32位:
+          https://raw.githubusercontent.com/xinyi1984/Release/${LATEST_COMMIT}/apk/minSdk${{ matrix.minSdk }}/mobile-armeabi_v7a.apk
+           手机版 64位:
+           https://raw.githubusercontent.com/xinyi1984/Release/${LATEST_COMMIT}/apk/minSdk${{ matrix.minSdk }}/mobile-arm64_v8a.apk"
+          echo ""
+          echo "📤 发送消息到企业微信..."
+          RESPONSE=$(curl -s -X POST "${{ secrets.WECHAT_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"msgtype\": \"text\",
+              \"text\": {
+                \"content\": \"$MESSAGE\"
+              }
+            }")
+          echo ""
+          echo "📬 企业微信响应: $RESPONSE"
+          if echo "$RESPONSE" | grep -q '"errcode":0'; then
+            echo "✅ 企业微信通知发送成功"
+          else
+            echo "❌ 企业微信通知发送失败"
+            exit 1
+          fi
+
+      # ========== 步骤25：工作流总结 (最终) ==========
+      - name: 工作流总结 (最终)
+        if: always()
+        run: |
+          echo "📋 工作流执行总结:"
+          echo "   工作流: ${{ github.workflow }}"
+          echo "   执行ID: ${{ github.run_id }}"
+          echo "   触发者: ${{ github.actor }}"
+          echo "   执行时间: $(date +'%Y年%m月%d日 %H:%M:%S')"
+          echo "   最终状态: ${{ job.status }}"
+          echo "   minSdk版本: ${{ matrix.minSdk }}"
+          echo ""
+          echo "📊 合并执行结果:"
+          echo "   合并步骤结果: ${{ steps.merge.outputs.merge_result || '未执行' }}"
+          if [ "${{ steps.merge.outputs.merge_result }}" == "success" ]; then
+            echo "   最新提交: ${{ steps.merge.outputs.latest_commit || '无' }}"
+          fi
+          if [ "${{ steps.merge.outputs.merge_result }}" == "conflict" ]; then
+            echo "   冲突文件: ${{ steps.merge.outputs.conflict_files || '无' }}"
+            echo "   冲突通知: 已发送Telegram通知"
+          fi
+          if [ "${{ steps.send-conflict-notification.conclusion }}" != "" ]; then
+            echo "   冲突通知步骤: ${{ steps.send-conflict-notification.conclusion || '未执行' }}"
+          fi
+          echo ""
+          echo "🏷️  版本信息:"
+          if [ "${{ steps.extra-modifications.conclusion }}" == "success" ]; then
+            echo "   版本名称: ${{ steps.extra-modifications.outputs.version_name || '未知' }}"
+            echo "   版本代码: ${{ steps.extra-modifications.outputs.version_code || '未知' }}"
+          else
+            echo "   版本信息: 未获取"
+          fi
+          echo ""
+          echo "🔨 构建执行结果:"
+          echo "   构建步骤结果: ${{ steps.gradle-build.conclusion || '未执行' }}"
+          echo "   准备APK步骤结果: ${{ steps.prepare-apk.conclusion || '未执行' }}"
+          if [ "${{ steps.prepare-apk.conclusion }}" == "success" ]; then
+            echo "   构建结果: ${{ steps.prepare-apk.outputs.build_result || '未知' }}"
+            echo "   生成APK数量: ${{ steps.prepare-apk.outputs.apk_count || '0' }}"
+            if [ "${{ steps.prepare-apk.outputs.apk_files_info }}" != "" ]; then
+              echo "   APK文件详情: ${{ steps.prepare-apk.outputs.apk_files_info }}"
+            fi
+          fi
+          echo ""
+          echo "🎯 操作状态汇总:"
+          if [ "${{ steps.merge.outputs.merge_result }}" == "success" ]; then
+            echo "   ✅ 有更新无冲突：合并成功并已推送更新"
+          fi
+          if [ "${{ steps.merge.outputs.merge_result }}" == "no_changes" ]; then
+            echo "   ℹ️  合并成功但无实质性更改"
+          fi
+          if [ "${{ steps.merge.outputs.merge_result }}" == "conflict" ]; then
+            echo "   ❌ 检测到合并冲突，已发送通知，请手动解决"
+          fi
+          if [ "${{ steps.prepare-apk.outputs.build_result }}" == "success" ]; then
+            echo "   ✅ 构建成功：生成 ${{ steps.prepare-apk.outputs.apk_count }} 个APK文件"
+            if [ "${{ steps.extra-modifications.conclusion }}" == "success" ]; then
+              echo "   📦 版本: ${{ steps.extra-modifications.outputs.version_name }} (Build ${{ steps.extra-modifications.outputs.version_code }})"
+            fi
+          elif [ "${{ steps.prepare-apk.outputs.build_result }}" == "failure" ]; then
+            echo "   ❌ 构建失败：未生成APK文件"
+          elif [ "${{ steps.prepare-apk.conclusion }}" == "skipped" ]; then
+            echo "   ⏭️  构建被跳过"
+          else
+            echo "   🔄 构建状态未知"
+          fi
