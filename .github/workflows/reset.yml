@@ -1,0 +1,26 @@
+name: 回退 TV 仓库到指定 commit
+
+on:
+  workflow_dispatch:  # 仅支持手动触发，避免自动执行造成意外
+
+jobs:
+  revert:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: 克隆 TV 仓库
+        run: |
+          git clone "https://${{ secrets.PUSH_TOKEN }}@github.com/xinyi1984/TV.git" tv_repo
+
+      - name: 切换到 fongmi 分支并强制回退
+        run: |
+          cd tv_repo
+          git checkout fongmi
+          git reset --hard 5c9db305d1a65845ba934ded866eb0bdbdc61e7d
+
+      - name: 强制推送到远程 fongmi 分支
+        run: |
+          cd tv_repo
+          git push origin fongmi --force
+
+      - name: 清理临时目录
+        run: rm -rf tv_repo
