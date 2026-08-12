@@ -311,7 +311,7 @@ jobs:
               else
                 echo "  ✓ minSdk 已经是 21，无需修改"
               fi
-              cp ../constants.gradle ../constants.gradle.bak
+              cp ../gradle/libs.versions.toml ../gradle/libs.versions.toml.bak
               current_minSdkVersion=$(grep -oP 'minSdkVersion\s*=\s*\K[0-9]+' ../constants.gradle || echo "")
               if [ -n "$current_minSdkVersion" ] && [ "$current_minSdkVersion" != 21 ]; then
                 sed -i 's/minSdkVersion = [0-9]\+/minSdkVersion = 21/g' ../constants.gradle
