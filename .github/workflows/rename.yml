@@ -1,7 +1,7 @@
 name: 重命名 libs → jniLibs 并提交
 
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
 
 jobs:
   rename:
@@ -22,10 +22,15 @@ jobs:
             exit 0
           fi
 
+      - name: 配置 Git 身份（用于提交）
+        run: |
+          cd tv_repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: 提交更改
         run: |
           cd tv_repo
-          # 检查是否有变更
           if git status --porcelain | grep -q .; then
             git commit -m "重命名 libs → jniLibs 以便打包 .so 文件"
           else
