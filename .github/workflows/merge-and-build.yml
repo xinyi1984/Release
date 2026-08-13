@@ -300,6 +300,7 @@ jobs:
           git clone --branch fongmi https://github.com/xinyi1984/tv.git ${{ matrix.mediadir }}/tv
           
           #  修改 gradle/libs.versions.toml targetSdk 为 28 解决安卓低版本读写权限问题
+          cd ${{ matrix.mediadir }}/tv
           cp gradle/libs.versions.toml gradle/libs.versions.toml.bak
           current_targetSdk=$(grep -oP 'targetSdk\s*=\s*"\K[0-9]+' gradle/libs.versions.toml || echo "")
           if [ -n "$current_targetSdk" ] && [ "$current_targetSdk" != "28" ]; then
