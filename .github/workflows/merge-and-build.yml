@@ -313,6 +313,18 @@ jobs:
           final_targetSdk=$(grep -oP 'targetSdk\s*=\s*"\K[0-9]+' gradle/libs.versions.toml)
           [ "$final_targetSdk" = "28" ] && echo "  ✓ targetSdk = $final_targetSdk" || echo "  ✗ targetSdk = $final_targetSdk (期望 28)"
           
+          # 修改 AndroidManifest.xml 解决安卓低版本读写权限问题
+          cp app/src/main/AndroidManifest.xml app/src/main/AndroidManifest.xml.bak
+          sed -i 's/\(<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"\) android:maxSdkVersion="32"\(.*\)/\1\2/' app/src/main/AndroidManifest.xml
+          sed -i 's/\(<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"\) android:maxSdkVersion="29"\(.*\)/\1\2/' app/src/main/AndroidManifest.xml
+          sed -i '/MANAGE_EXTERNAL_STORAGE/d' app/src/main/AndroidManifest.xml
+
+          echo "🔍 AndroidManifest.xml 前 10 行:"
+          head -n 10 app/src/main/AndroidManifest.xml
+          echo ""
+          echo "🔍 存储权限行:"
+          grep -E "READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|MANAGE_EXTERNAL_STORAGE" app/src/main/AndroidManifest.xml || echo "（无相关权限）
+          
           if [ "${{ matrix.minSdk }}" = "21" ]; then
             # cd ${{ matrix.mediadir }}/tv
             # 1. 修改 gradle/libs.versions.toml 和 ../gradle/libs.versions.toml
