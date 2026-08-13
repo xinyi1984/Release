@@ -323,7 +323,7 @@ jobs:
           head -n 10 app/src/main/AndroidManifest.xml
           echo ""
           echo "🔍 存储权限行:"
-          grep -E "READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|MANAGE_EXTERNAL_STORAGE" app/src/main/AndroidManifest.xml || echo "（无相关权限）
+          grep -E "READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|MANAGE_EXTERNAL_STORAGE" app/src/main/AndroidManifest.xml || echo "（无相关权限）"
           
           if [ "${{ matrix.minSdk }}" = "21" ]; then
             # cd ${{ matrix.mediadir }}/tv
