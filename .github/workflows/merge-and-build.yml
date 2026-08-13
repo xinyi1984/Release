@@ -501,7 +501,7 @@ jobs:
             fi
             
             echo "✅ minSdk 21 配置修改完成"
-          else
+           # else
             # cd ${{ matrix.mediadir }}/tv
           fi
           committv=$(git rev-parse HEAD)
