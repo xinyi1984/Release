@@ -314,7 +314,7 @@ jobs:
           [ "$final_targetSdk" = "28" ] && echo "  ✓ targetSdk = $final_targetSdk" || echo "  ✗ targetSdk = $final_targetSdk (期望 28)"
           
           if [ "${{ matrix.minSdk }}" = "21" ]; then
-            cd ${{ matrix.mediadir }}/tv
+            # cd ${{ matrix.mediadir }}/tv
             # 1. 修改 gradle/libs.versions.toml 和 ../gradle/libs.versions.toml
             if [ -f "gradle/libs.versions.toml" ]; then
               echo "🔧 修改 gradle/libs.versions.toml和../gradle/libs.versions.toml"
@@ -502,7 +502,7 @@ jobs:
             
             echo "✅ minSdk 21 配置修改完成"
           else
-            cd ${{ matrix.mediadir }}/tv
+            # cd ${{ matrix.mediadir }}/tv
           fi
           committv=$(git rev-parse HEAD)
           commitStv=${committv:0:7}
