@@ -9,7 +9,7 @@ jobs:
     steps:
       - name: 克隆 TV 仓库 (fongmi 分支)
         run: |
-          git clone --branch fongmi "https://${{ secrets.PUSH_TOKEN }}@github.com/xinyi1984/FFmpeg.git" tv_repo
+          git clone --branch release-9.0-fongmi "https://${{ secrets.PUSH_TOKEN }}@github.com/xinyi1984/FFmpeg.git" tv_repo
 
       - name: 重命名 app/src/main/libs → jniLibs
         run: |
