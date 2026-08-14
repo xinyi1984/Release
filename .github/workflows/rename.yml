@@ -9,14 +9,14 @@ jobs:
     steps:
       - name: 克隆 TV 仓库 (fongmi 分支)
         run: |
-          git clone --branch fongmi "https://${{ secrets.PUSH_TOKEN }}@github.com/xinyi1984/TV.git" tv_repo
+          git clone --branch fongmi "https://${{ secrets.PUSH_TOKEN }}@github.com/xinyi1984/FFmpeg.git" tv_repo
 
       - name: 重命名 app/src/main/libs → jniLibs
         run: |
           cd tv_repo
-          if [ -d "app/src/main/libs" ]; then
-            echo "✅ 发现 app/src/main/libs，准备重命名..."
-            git mv app/src/main/libs app/src/main/jniLibs
+          if [ -d ".forgejo" ]; then
+            echo "✅ 发现 .forgejo，准备重命名..."
+            git mv .forgejo .github
           else
             echo "⚠️ 目录 app/src/main/libs 不存在，跳过重命名"
             exit 0
