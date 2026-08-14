@@ -41,7 +41,7 @@ jobs:
       - name: 推送到远程 fongmi 分支
         run: |
           cd tv_repo
-          git push origin fongmi
+          git push origin release-9.0-fongmi
 
       - name: 清理临时目录
         run: rm -rf tv_repo
