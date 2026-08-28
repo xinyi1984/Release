@@ -13,6 +13,10 @@ on:
         description: '构建后不提交发布新版'
         required: false
         type: boolean
+      check_local_changes:      
+        description: '检查原代码并修改'
+        required: false
+        type: boolean 
 env:
   TZ: Asia/Shanghai
   CNB_API_ENDPOINT: https://api.cnb.cool
@@ -287,9 +291,37 @@ jobs:
           exit 1
           
       # ==================== 构建 minSdk=24 和 21 ====================
-      # ========== 步骤7：检出源代码 ==========
-      - name: 检出源代码
-        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+      # ========== 步骤7：检出源代码无修改==========
+      - name: 检出源代码无修改
+        if: ${{ env.commit && github.event.inputs.check_local_changes != 'true' &&  (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
+        run: |
+          echo "📱 构建minSdk版本: ${{ matrix.minSdk }}"
+          git clone --branch release-1.11.0-fongmi https://github.com/xinyi1984/media.git ${{ matrix.mediadir }}
+          cd ${{ matrix.mediadir }}
+          echo "MEDIA_VERSION=1.11.0-fongmi" >> $GITHUB_ENV
+          echo "USING_LEGACY_VERSION=false" >> $GITHUB_ENV
+
+          cd $GITHUB_WORKSPACE
+
+          git clone --branch fongmi https://github.com/xinyi1984/tv.git ${{ matrix.mediadir }}/tv
+          cd ${{ matrix.mediadir }}/tv
+
+          committv=$(git rev-parse HEAD)
+          commitStv=${committv:0:7}
+          echo "committv=$committv" >> $GITHUB_ENV
+          echo "commitStv=$commitStv" >> $GITHUB_ENV
+          export TZ='Asia/Shanghai'
+          echo "tagtv=$(git log --date=format:'%Y%m%d-%H%M' --pretty=format:%cd $commitStv -1)" >> $GITHUB_ENV
+          echo "✅ 源代码检出完成"
+          echo "📊 配置汇总:"
+          echo "  - minSdk版本: ${{ matrix.minSdk }}"
+          echo "  - Media版本: $MEDIA_VERSION"
+          echo "  - TV提交ID: $committv"
+          
+      # ==================== 构建 minSdk=24 和 21 ====================
+      # ========== 步骤7：检出源代码并修改 ==========
+      - name: 检出源代码并修改
+        if: ${{ env.commit &&  github.event.inputs.check_local_changes == 'true' &&  (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         run: |
           echo "📱 构建minSdk版本: ${{ matrix.minSdk }}"
           git clone --branch release-1.11.0-fongmi https://github.com/xinyi1984/media.git ${{ matrix.mediadir }}
