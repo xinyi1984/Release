@@ -27,6 +27,8 @@ env:
 jobs:
   merge-and-build:
     name: 同步和构建应用
+    # 如果 minSdk=21 且未勾选“检查原代码并修改”，则跳过整个任务
+    if: ${{ !(matrix.minSdk == 21 && github.event.inputs.check_local_changes != 'true') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
