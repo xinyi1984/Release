@@ -449,6 +449,13 @@ jobs:
               else
                 echo "  ✓ okhttp 已经是 5.4.0，无需修改"
               fi
+              current_appcompat=$(grep -oP 'appcompat\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1 || echo "")
+              if [ -n "$current_appcompat" ] && [ "$current_appcompat" != "1.7.1" ]; then
+                sed -i 's/appcompat\s*=\s*"[^"]*"/appcompat = "1.7.1"/g' gradle/libs.versions.toml
+                echo "  ✓ appcompat: $current_appcompat → 1.7.1"
+              else
+                echo "  ✓ okhttp 已经是 5.4.0，无需修改"
+              fi
               echo ""
               echo "✅ 修改后的 gradle/libs.versions.toml 和 ../gradle/libs.versions.toml 关键配置:"
               echo "----------------------------------------"
@@ -469,6 +476,7 @@ jobs:
               final_room=$(grep -oP 'room\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
               final_glide=$(grep -oP 'glide\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
               final_okhttp=$(grep -oP 'okhttp\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
+              final_appcompat=$(grep -oP 'appcompat\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
               [ "$final_minSdk" = "21" ] && echo "  ✓ minSdk = $final_minSdk" || echo "  ✗ minSdk = $final_minSdk (期望 21)"
               [ "$final_minSdkVersion" = "21" ] && echo "  ✓ minSdkVersion = $final_minSdkVersion" || echo "  ✗ minSdkVersion = $final_minSdkVersion (期望 21)"
               [ "$final_targetSdk" = "28" ] && echo "  ✓ targetSdk = $final_targetSdk" || echo "  ✗ targetSdk = $final_targetSdk (期望 28)"
@@ -481,6 +489,7 @@ jobs:
               [ "$final_room" = "2.7.0" ] && echo "  ✓ room = $final_room" || echo "  ✗ room = $final_room (期望 2.7.0)"
               [ "$final_glide" = "5.0.7" ] && echo "  ✓ glide = $final_glide" || echo "  ✗ glide = $final_glide (期望 5.0.7)"
               [ "$final_okhttp" = "5.4.0" ] && echo "  ✓ okhttp = $final_okhttp" || echo "  ✗ okhttp = $final_okhttp (期望 5.4.0)"
+              [ "$final_appcompat" = "1.7.1" ] && echo "  ✓ okhttp = $final_appcompat" || echo "  ✗ appcompat = $final_appcompat (期望 1.7.1)"
               echo ""
               echo "✅ gradle/libs.versions.toml 和 constants.gradle 修改完成"
             fi
