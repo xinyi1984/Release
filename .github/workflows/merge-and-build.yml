@@ -26,9 +26,8 @@ env:
   
 jobs:
   merge-and-build:
-    name: 同步和构建应用
-    # 如果 minSdk=21 且未勾选“检查原代码并修改”，则跳过整个任务
     if: ${{ !(matrix.minSdk == 21 && github.event.inputs.check_local_changes != 'true') }}
+    name: 同步和构建应用
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -294,7 +293,7 @@ jobs:
           
       # ==================== 构建 minSdk=24 和 21 ====================
       # ========== 步骤7：检出源代码无修改==========
-      - name: 检出源代码无修改
+      - name: 检出源代码
         if: ${{ env.commit && github.event.inputs.check_local_changes != 'true' &&  (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         run: |
           echo "📱 构建minSdk版本: ${{ matrix.minSdk }}"
@@ -322,7 +321,7 @@ jobs:
           
       # ==================== 构建 minSdk=24 和 21 ====================
       # ========== 步骤7：检出源代码并修改 ==========
-      - name: 检出源代码并修改
+      - name: 检出源代码
         if: ${{ env.commit &&  github.event.inputs.check_local_changes == 'true' &&  (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         run: |
           echo "📱 构建minSdk版本: ${{ matrix.minSdk }}"
