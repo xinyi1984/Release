@@ -468,7 +468,7 @@ jobs:
               final_media=$(grep -oP 'media\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
               final_room=$(grep -oP 'room\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
               final_glide=$(grep -oP 'glide\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
-              final_okhttp$(grep -oP 'okhttp\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
+              final_okhttp=$(grep -oP 'okhttp\s*=\s*"\K[^"]+' gradle/libs.versions.toml | head -1)
               [ "$final_minSdk" = "21" ] && echo "  ✓ minSdk = $final_minSdk" || echo "  ✗ minSdk = $final_minSdk (期望 21)"
               [ "$final_minSdkVersion" = "21" ] && echo "  ✓ minSdkVersion = $final_minSdkVersion" || echo "  ✗ minSdkVersion = $final_minSdkVersion (期望 21)"
               [ "$final_targetSdk" = "28" ] && echo "  ✓ targetSdk = $final_targetSdk" || echo "  ✗ targetSdk = $final_targetSdk (期望 28)"
@@ -479,8 +479,8 @@ jobs:
               [ "$final_lifecycleService" = "2.5.1" ] && echo "  ✓ lifecycleService = $final_lifecycleService" || echo "  ✗ lifecycleService = $final_lifecycleService (期望 2.5.1)"
               [ "$final_media" = "1.7.1" ] && echo "  ✓ media = $final_media" || echo "  ✗ media = $final_media (期望 1.7.1)"
               [ "$final_room" = "2.7.0" ] && echo "  ✓ room = $final_room" || echo "  ✗ room = $final_room (期望 2.7.0)"
-              [ "$final_glide" = "5.0.7" ] && echo "  ✓ glide = $final_glide" || echo "  ✗ room = $final_glide (期望 5.0.7)"
-              [ "$final_okhttp" = "5.4.0" ] && echo "  ✓ okhttp = $final_okhttp" || echo "  ✗ room = $final_okhttp (期望 5.4.0)"
+              [ "$final_glide" = "5.0.7" ] && echo "  ✓ glide = $final_glide" || echo "  ✗ glide = $final_glide (期望 5.0.7)"
+              [ "$final_okhttp" = "5.4.0" ] && echo "  ✓ okhttp = $final_okhttp" || echo "  ✗ okhttp = $final_okhttp (期望 5.4.0)"
               echo ""
               echo "✅ gradle/libs.versions.toml 和 constants.gradle 修改完成"
             fi
