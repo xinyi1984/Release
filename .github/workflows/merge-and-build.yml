@@ -48,13 +48,13 @@ jobs:
     steps:
       # ========== 步骤1：检出代码 ==========
       - name: Checkout
-        if: ${{ !(matrix.minSdk == 21 && github.event.inputs.check_local_changes != 'true') }}
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       # ========== 步骤2：检查新提交 ==========
       - name: 检查新提交
+        if: ${{ !(matrix.minSdk == 21 && github.event.inputs.check_local_changes != 'true') }}
         run: |
           USER_NAME="xinyi1984"
           REPO_NAME="TV"
