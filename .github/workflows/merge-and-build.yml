@@ -26,7 +26,6 @@ env:
   
 jobs:
   merge-and-build:
-    if: ${{ !(matrix.minSdk == 21 && github.event.inputs.check_local_changes != 'true') }}
     name: 同步和构建应用
     runs-on: ubuntu-latest
     strategy:
@@ -49,6 +48,7 @@ jobs:
     steps:
       # ========== 步骤1：检出代码 ==========
       - name: Checkout
+        if: ${{ !(matrix.minSdk == 21 && github.event.inputs.check_local_changes != 'true') }}
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
