@@ -502,7 +502,7 @@ jobs:
               'org.gradle.parallel=true' \
               '' \
               'android.useAndroidX=true' \
-              'android.enableJetifier=true' \
+              'android.enableJetifier=false' \
               'android.useFullClasspathForDexingTransform=true' \
               'android.nonTransitiveRClass=false' \
               'android.nonFinalResIds=false' \
