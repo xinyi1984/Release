@@ -15,7 +15,7 @@ jobs:
         run: |
           cd tv_repo
           git checkout fongmi
-          git reset --hard 0e93a77b4b37b6cfe8d3d4ecb5bf4cf7f3de7fe9
+          git reset --hard e79fc0268b190b649dd3c167e7b67d1efe86b364
 
       - name: 强制推送到远程 fongmi 分支
         run: |
