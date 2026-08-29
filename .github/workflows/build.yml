@@ -1,8 +1,6 @@
-name: merge-and-build
+name: build
 
 on:
-  schedule:
-    - cron: '20 3 * * *'
   workflow_dispatch:
     inputs:
       rebuild:
@@ -46,7 +44,7 @@ jobs:
           fetch-depth: 0
           
       # ==================== 构建 minSdk=24 和 21 ====================
-      # ========== 步骤7：检出源代码无修改==========
+      # ========== 步骤2：检出源代码无修改==========
       - name: 检出源代码无修改
         run: |
           echo "📱 构建minSdk版本: ${{ matrix.minSdk }}"
@@ -72,7 +70,7 @@ jobs:
           echo "  - Media版本: $MEDIA_VERSION"
           echo "  - TV提交ID: $committv"
 
-      # ========== 步骤8：检查项目结构 ==========
+      # ========== 步骤3：检查项目结构 ==========
       - name: 检查项目结构
         working-directory: ${{ matrix.mediadir }}/tv
         run: |
@@ -96,7 +94,7 @@ jobs:
             echo "❌ settings.gradle 不存在"
           fi
 
-      # ========== 步骤9：额外修改和获取版本信息 ==========
+      # ========== 步骤4：额外修改和获取版本信息 ==========
       - name: 额外修改和获取版本信息
         id: extra-modifications
         working-directory: ${{ matrix.mediadir }}/tv
@@ -129,14 +127,14 @@ jobs:
             sed -i "/jitpack.io/a\        maven { url 'https://o0HalfLife0o.github.io/crosswalk/releases/crosswalk/android/maven2' }" build.gradle
           fi
 
-      # ========== 步骤10：压缩源代码 ==========
+      # ========== 步骤5：压缩源代码 ==========
       - name: 压缩源代码
         working-directory: ${{ matrix.mediadir }}/tv
         run: |
           rm -rf release
           zip -q -x ".git/*" -x  ".github/*" -r source-${{ env.commitStv }}.zip .
 
-      # ========== 步骤11：手动安装 JetBrains Runtime ==========
+      # ========== 步骤6：手动安装 JetBrains Runtime ==========
       - name: 手动安装 JetBrains Runtime
         run: |
           JBR_URL="https://d2xrhe97vsfxuc.cloudfront.net/jbrsdk-21.0.10-linux-x64-b1163.110.tar.gz"
@@ -148,7 +146,7 @@ jobs:
           echo "PATH=\$PATH:$INSTALL_DIR/bin" >> $GITHUB_PATH
           echo "✅ JetBrains Runtime 安装完成"
 
-      # ========== 步骤12：验证 Java 环境（优化后） ==========
+      # ========== 步骤7：验证 Java 环境（优化后） ==========
       - name: 验证 Java 环境
         run: |
           export JAVA_HOME="$JAVA_HOME"
@@ -156,15 +154,15 @@ jobs:
           echo "JAVA_HOME=$JAVA_HOME"
           $JAVA_HOME/bin/java -version
 
-      # ========== 步骤13：设置Android SDK ==========
+      # ========== 步骤8：设置Android SDK ==========
       - name: 设置Android SDK
         uses: android-actions/setup-android@v4
 
-      # ========== 步骤14：设置Gradle ==========
+      # ========== 步骤9：设置Gradle ==========
       - name: 设置Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      # ========== 步骤15：构建 Media 模块 AAR ==========
+      # ========== 步骤10：构建 Media 模块 AAR ==========
       - name: 构建 Media 模块 AAR
         working-directory: ${{ matrix.mediadir }}
         run: |
@@ -218,7 +216,7 @@ jobs:
           ls -la tv/app/libs/
           set -e
 
-      # ========== 步骤17：安装 Python (根据 minSdk 版本) ==========
+      # ========== 步骤11：安装 Python (根据 minSdk 版本) ==========
       - name: 安装 Python (根据 minSdk 版本)
         run: |
           if ! command -v uv &> /dev/null; then
@@ -251,7 +249,7 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           echo "✅ Python ${PYTHON_VERSION} 安装完成"
         
-      # ========== 步骤18：构建 APK==========
+      # ========== 步骤12：构建 APK==========
       - name: 构建 APK
         id: gradle-build
         working-directory: ${{ matrix.mediadir }}/tv
@@ -273,7 +271,7 @@ jobs:
           ./gradlew clean
           ./gradlew assemblerelease --build-cache --parallel --daemon --warning-mode all
           
-      # ========== 步骤19：准备 APK ==========
+      # ========== 步骤13：准备 APK ==========
       - name: 准备 APK
         id: prepare-apk
         working-directory: ${{ matrix.mediadir }}/tv
@@ -317,7 +315,7 @@ jobs:
           echo "apk 目录最终内容:"
           ls -la apk/
 
-      # ========== 步骤20：推送 APK (minSdk=${{ matrix.minSdk }}) 到 fongmi 分支（移除 --depth 2） ==========
+      # ========== 步骤14：推送 APK (minSdk=${{ matrix.minSdk }}) 到 fongmi 分支（移除 --depth 2） ==========
       - name: 推送 APK (minSdk=${{ matrix.minSdk }}) 到 fongmi 分支
         run: |
           set -e
@@ -376,7 +374,7 @@ jobs:
           rm -rf release-apk-${{ matrix.minSdk }}
           echo "✅ APK (minSdk=${{ matrix.minSdk }}) 推送完成"
 
-      # ========== 步骤21：更新 README（fongmi 分支，移除 --depth 2） ==========
+      # ========== 步骤15：更新 README（fongmi 分支，移除 --depth 2） ==========
       - name: 更新 README（fongmi 分支）
         run: |
           echo "克隆 Release 仓库 (fongmi 分支) 用于更新 README..."
@@ -408,7 +406,7 @@ jobs:
           cd ..
           rm -rf master-commit-${{ matrix.minSdk }}
 
-      # ========== 步骤22：发送企业微信通知 ==========
+      # ========== 步骤16：发送企业微信通知 ==========
       - name: 发送企业微信通知
         if: false   # 已禁用
         run: |
@@ -477,71 +475,4 @@ jobs:
           else
             echo "❌ 企业微信通知发送失败"
             exit 1
-          fi
-
-      # ========== 步骤25：工作流总结 (最终) ==========
-      - name: 工作流总结 (最终)
-        if: always()
-        run: |
-          echo "📋 工作流执行总结:"
-          echo "   工作流: ${{ github.workflow }}"
-          echo "   执行ID: ${{ github.run_id }}"
-          echo "   触发者: ${{ github.actor }}"
-          echo "   执行时间: $(date +'%Y年%m月%d日 %H:%M:%S')"
-          echo "   最终状态: ${{ job.status }}"
-          echo "   minSdk版本: ${{ matrix.minSdk }}"
-          echo ""
-          echo "📊 合并执行结果:"
-          echo "   合并步骤结果: ${{ steps.merge.outputs.merge_result || '未执行' }}"
-          if [ "${{ steps.merge.outputs.merge_result }}" == "success" ]; then
-            echo "   最新提交: ${{ steps.merge.outputs.latest_commit || '无' }}"
-          fi
-          if [ "${{ steps.merge.outputs.merge_result }}" == "conflict" ]; then
-            echo "   冲突文件: ${{ steps.merge.outputs.conflict_files || '无' }}"
-            echo "   冲突通知: 已发送Telegram通知"
-          fi
-          if [ "${{ steps.send-conflict-notification.conclusion }}" != "" ]; then
-            echo "   冲突通知步骤: ${{ steps.send-conflict-notification.conclusion || '未执行' }}"
-          fi
-          echo ""
-          echo "🏷️  版本信息:"
-          if [ "${{ steps.extra-modifications.conclusion }}" == "success" ]; then
-            echo "   版本名称: ${{ steps.extra-modifications.outputs.version_name || '未知' }}"
-            echo "   版本代码: ${{ steps.extra-modifications.outputs.version_code || '未知' }}"
-          else
-            echo "   版本信息: 未获取"
-          fi
-          echo ""
-          echo "🔨 构建执行结果:"
-          echo "   构建步骤结果: ${{ steps.gradle-build.conclusion || '未执行' }}"
-          echo "   准备APK步骤结果: ${{ steps.prepare-apk.conclusion || '未执行' }}"
-          if [ "${{ steps.prepare-apk.conclusion }}" == "success" ]; then
-            echo "   构建结果: ${{ steps.prepare-apk.outputs.build_result || '未知' }}"
-            echo "   生成APK数量: ${{ steps.prepare-apk.outputs.apk_count || '0' }}"
-            if [ "${{ steps.prepare-apk.outputs.apk_files_info }}" != "" ]; then
-              echo "   APK文件详情: ${{ steps.prepare-apk.outputs.apk_files_info }}"
-            fi
-          fi
-          echo ""
-          echo "🎯 操作状态汇总:"
-          if [ "${{ steps.merge.outputs.merge_result }}" == "success" ]; then
-            echo "   ✅ 有更新无冲突：合并成功并已推送更新"
-          fi
-          if [ "${{ steps.merge.outputs.merge_result }}" == "no_changes" ]; then
-            echo "   ℹ️  合并成功但无实质性更改"
-          fi
-          if [ "${{ steps.merge.outputs.merge_result }}" == "conflict" ]; then
-            echo "   ❌ 检测到合并冲突，已发送通知，请手动解决"
-          fi
-          if [ "${{ steps.prepare-apk.outputs.build_result }}" == "success" ]; then
-            echo "   ✅ 构建成功：生成 ${{ steps.prepare-apk.outputs.apk_count }} 个APK文件"
-            if [ "${{ steps.extra-modifications.conclusion }}" == "success" ]; then
-              echo "   📦 版本: ${{ steps.extra-modifications.outputs.version_name }} (Build ${{ steps.extra-modifications.outputs.version_code }})"
-            fi
-          elif [ "${{ steps.prepare-apk.outputs.build_result }}" == "failure" ]; then
-            echo "   ❌ 构建失败：未生成APK文件"
-          elif [ "${{ steps.prepare-apk.conclusion }}" == "skipped" ]; then
-            echo "   ⏭️  构建被跳过"
-          else
-            echo "   🔄 构建状态未知"
           fi
