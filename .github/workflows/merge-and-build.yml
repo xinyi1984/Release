@@ -48,7 +48,6 @@ jobs:
       # ==================== 构建 minSdk=24 和 21 ====================
       # ========== 步骤7：检出源代码无修改==========
       - name: 检出源代码无修改
-        if: ${{ env.commit && github.event.inputs.check_local_changes != 'true' &&  (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         run: |
           echo "📱 构建minSdk版本: ${{ matrix.minSdk }}"
           git clone --branch release-1.11.0-fongmi https://github.com/xinyi1984/media.git ${{ matrix.mediadir }}
@@ -75,7 +74,6 @@ jobs:
 
       # ========== 步骤8：检查项目结构 ==========
       - name: 检查项目结构
-        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         working-directory: ${{ matrix.mediadir }}/tv
         run: |
           echo "=== 检查项目结构 ==="
@@ -100,7 +98,6 @@ jobs:
 
       # ========== 步骤9：额外修改和获取版本信息 ==========
       - name: 额外修改和获取版本信息
-        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         id: extra-modifications
         working-directory: ${{ matrix.mediadir }}/tv
         run: |
@@ -134,7 +131,6 @@ jobs:
 
       # ========== 步骤10：压缩源代码 ==========
       - name: 压缩源代码
-        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         working-directory: ${{ matrix.mediadir }}/tv
         run: |
           rm -rf release
@@ -142,7 +138,6 @@ jobs:
 
       # ========== 步骤11：手动安装 JetBrains Runtime ==========
       - name: 手动安装 JetBrains Runtime
-        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         run: |
           JBR_URL="https://d2xrhe97vsfxuc.cloudfront.net/jbrsdk-21.0.10-linux-x64-b1163.110.tar.gz"
           INSTALL_DIR="/opt/jbr"
@@ -155,7 +150,6 @@ jobs:
 
       # ========== 步骤12：验证 Java 环境（优化后） ==========
       - name: 验证 Java 环境
-        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         run: |
           export JAVA_HOME="$JAVA_HOME"
           export PATH="$PATH:$JAVA_HOME/bin"
@@ -164,17 +158,14 @@ jobs:
 
       # ========== 步骤13：设置Android SDK ==========
       - name: 设置Android SDK
-        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         uses: android-actions/setup-android@v4
 
       # ========== 步骤14：设置Gradle ==========
       - name: 设置Gradle
-        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         uses: gradle/actions/setup-gradle@v6
 
       # ========== 步骤15：构建 Media 模块 AAR ==========
       - name: 构建 Media 模块 AAR
-        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         working-directory: ${{ matrix.mediadir }}
         run: |
           set +e
@@ -227,43 +218,8 @@ jobs:
           ls -la tv/app/libs/
           set -e
 
-      # ========== 步骤16：修改所有 AAR 中的 minSdk（24→21） ==========
-      - name: 修改 AAR 文件中的 minSdk 24→21
-        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') && matrix.minSdk == '21' }}
-        working-directory: ${{ matrix.mediadir }}/tv
-        run: |
-          echo "🔧 修改 AAR 文件中的 minSdk (24→21)..."
-          for aar_file in app/libs/*.aar; do
-            if [ -f "$aar_file" ]; then
-              echo "  处理: $(basename "$aar_file")"
-              temp_dir=$(mktemp -d)
-              unzip -q "$aar_file" -d "$temp_dir"
-              if [ -f "$temp_dir/AndroidManifest.xml" ]; then
-                current_minSdk=$(grep -oP 'minSdkVersion="\K[0-9]+' "$temp_dir/AndroidManifest.xml" || echo "")
-                if [ -n "$current_minSdk" ] && [ "$current_minSdk" != "21" ]; then
-                  sed -i 's/minSdkVersion="[0-9]\+"/minSdkVersion="21"/g' "$temp_dir/AndroidManifest.xml"
-                  sed -i 's/minSdkVersion=[0-9]\+/minSdkVersion=21/g' "$temp_dir/AndroidManifest.xml"
-                  echo "    ✓ minSdk: $current_minSdk → 21"
-                  cd "$temp_dir"
-                  zip -q -r "$OLDPWD/$aar_file" .
-                  cd "$OLDPWD"
-                  echo "    ✅ 已重新打包"
-                else
-                  echo "    ✓ minSdk 已经是 21，无需修改"
-                fi
-              else
-                echo "    ⚠️ 未找到 AndroidManifest.xml"
-              fi
-              rm -rf "$temp_dir"
-            fi
-          done
-          echo "✅ AAR 文件修改完成"
-          echo "app/libs 目录内容:"
-          ls -la app/libs/
-
       # ========== 步骤17：安装 Python (根据 minSdk 版本) ==========
       - name: 安装 Python (根据 minSdk 版本)
-        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         run: |
           if ! command -v uv &> /dev/null; then
             echo "📦 安装 uv..."
@@ -297,7 +253,6 @@ jobs:
         
       # ========== 步骤18：构建 APK==========
       - name: 构建 APK
-        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         id: gradle-build
         working-directory: ${{ matrix.mediadir }}/tv
         timeout-minutes: 30
@@ -320,7 +275,6 @@ jobs:
           
       # ========== 步骤19：准备 APK ==========
       - name: 准备 APK
-        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         id: prepare-apk
         working-directory: ${{ matrix.mediadir }}/tv
         run: |
@@ -365,7 +319,6 @@ jobs:
 
       # ========== 步骤20：推送 APK (minSdk=${{ matrix.minSdk }}) 到 fongmi 分支（移除 --depth 2） ==========
       - name: 推送 APK (minSdk=${{ matrix.minSdk }}) 到 fongmi 分支
-        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         run: |
           set -e
           echo "克隆 Release 仓库 (fongmi 分支)..."
@@ -425,7 +378,6 @@ jobs:
 
       # ========== 步骤21：更新 README（fongmi 分支，移除 --depth 2） ==========
       - name: 更新 README（fongmi 分支）
-        if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         run: |
           echo "克隆 Release 仓库 (fongmi 分支) 用于更新 README..."
           git clone --depth 2 --branch fongmi "https://${{ secrets.PUSH_TOKEN }}@github.com/xinyi1984/Release.git" master-commit-${{ matrix.minSdk }} || {
@@ -458,7 +410,6 @@ jobs:
 
       # ========== 步骤22：发送企业微信通知 ==========
       - name: 发送企业微信通知
-        #if: ${{ env.commit && (steps.merge.outputs.merge_result == 'success' || steps.merge.outputs.merge_result == 'no_changes') }}
         if: false   # 已禁用
         run: |
           echo "📱 发送企业微信通知..."
