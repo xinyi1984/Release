@@ -1,8 +1,8 @@
 name: merge-and-build
 
 on:
-  schedule:
-    - cron: '20 3 * * *'
+  #schedule:
+    #- cron: '20 3 * * *'
   workflow_dispatch:
     inputs:
       rebuild:
