@@ -689,7 +689,7 @@ jobs:
           ./gradlew projects > projects.txt
           NEEDED_MODULES=(
             "common" "container" "database" "datasource" "datasource_okhttp" "datasource_rtmp"
-            "decoder" "decoder_av1" "decoder_mpegh" "effect" "exoplayer" "exoplayer_dash" "exoplayer_hls"
+            "decoder" "decoder_av1" "decoder_ffmpeg" "decoder_mpegh" "effect" "exoplayer" "exoplayer_dash" "exoplayer_hls"
             "exoplayer_rtsp" "exoplayer_smoothstreaming" "extractor" "mpvplayer" "session" "ui" "ui_danmaku"
           )
           PROJECTS=()
